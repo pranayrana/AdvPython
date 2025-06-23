@@ -1,0 +1,42 @@
+name: Delete Branch With Approval
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  approve-and-delete:
+    if: |
+      contains(github.event.comment.body, '/approve-delete') &&
+      github.event.issue.title == 'Request to delete branch'
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+      contents: write
+
+    steps:
+      - name: Check if user is an authorized approver
+        run: |
+          APPROVER="${{ github.event.comment.user.login }}"
+          if [[ "$APPROVER" != "pranayrana" ]]; then
+            echo "Unauthorized approval by $APPROVER"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Extract branch from issue body
+        id: get_branch
+        run: |
+          BRANCH_NAME=$(gh issue view ${{ github.event.issue.number }} --json body -q ".body" | grep -oP '(?<=Branch: ).*')
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+
+      - name: Delete the branch
+        run: |
+          BRANCH_NAME=${{ steps.get_branch.outputs.branch }}
+          echo "Deleting branch: $BRANCH_NAME"
+          gh api --method DELETE /repos/${{ github.repository }}/git/refs/heads/$BRANCH_NAME
+        env:
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
