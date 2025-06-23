@@ -20,7 +20,7 @@ jobs:
         run: |
           APPROVER="${{ github.event.comment.user.login }}"
           if [[ "$APPROVER" != "pranayrana" ]]; then
-            echo "Unauthorized approval by $APPROVER"
+            echo "❌ Unauthorized approval by $APPROVER"
             exit 1
           fi
         shell: bash
@@ -28,15 +28,32 @@ jobs:
       - name: Extract branch from issue body
         id: get_branch
         run: |
-          BRANCH_NAME=$(gh issue view ${{ github.event.issue.number }} --json body -q ".body" | grep -oP '(?<=Branch: ).*')
+          echo "Fetching issue body to extract branch name..."
+          BODY=$(gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --json body -q ".body")
+
+          echo "Issue body: $BODY"
+
+          BRANCH_NAME=$(echo "$BODY" | grep -oP '(?<=Branch: ).*' | tr -d '\r')
+
+          if [[ -z "$BRANCH_NAME" ]]; then
+            echo "❌ No branch name found in issue body. Make sure it follows 'Branch: branch-name'"
+            exit 1
+          fi
+
+          echo "✅ Branch to delete: $BRANCH_NAME"
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.BOT_TOKEN }}
+        shell: bash
 
       - name: Delete the branch
         run: |
           BRANCH_NAME=${{ steps.get_branch.outputs.branch }}
-          echo "Deleting branch: $BRANCH_NAME"
-          gh api --method DELETE /repos/${{ github.repository }}/git/refs/heads/$BRANCH_NAME
+          echo "🚨 Deleting branch: $BRANCH_NAME"
+          gh api \
+            --method DELETE \
+            /repos/${{ github.repository }}/git/refs/heads/$BRANCH_NAME
         env:
           GH_TOKEN: ${{ secrets.BOT_TOKEN }}
